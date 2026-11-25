@@ -1,0 +1,340 @@
+{
+  "info": {
+    "_postman_id": "dfe1495b-1c93-4a2d-bef7-a20d2cb4f748",
+    "name": "IMS Backend API",
+    "description": "Run Auth > POST /auth/login once first. The returned JWT is saved automatically and inherited by every protected request. If a request returns 401, run login again.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{imsToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:5000/api" },
+    { "key": "adminEmail", "value": "admin@example.com" },
+    { "key": "adminPassword", "value": "replace-me" },
+    { "key": "imsToken", "value": "" },
+    { "key": "runId", "value": "" },
+    { "key": "categoryId", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "supplierId", "value": "" },
+    { "key": "purchaseId", "value": "" },
+    { "key": "saleId", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('runId')) {",
+          "  pm.collectionVariables.set('runId', pm.variables.replaceIn('{{$guid}}').replace(/-/g, '').slice(0, 8).toUpperCase());",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health", "auth": { "type": "noauth" } },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('API is healthy', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.status).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/login",
+          "request": {
+            "method": "POST",
+            "auth": { "type": "noauth" },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{adminEmail}}\",\"password\":\"{{adminPassword}}\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Admin login succeeds', function () {",
+                  "  const body = pm.response.json();",
+                  "  if (pm.response.code === 200 && body.success && body.data && body.data.token) {",
+                  "    pm.collectionVariables.set('imsToken', body.data.token);",
+                  "  } else {",
+                  "    pm.collectionVariables.unset('imsToken');",
+                  "  }",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(body.success).to.eql(true);",
+                  "  pm.expect(body.data.token).to.be.a('string').and.not.empty;",
+                  "  console.log('IMS login token saved for this collection.');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /auth/me",
+          "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Current user is authenticated', function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Catalog and stock",
+      "item": [
+        {
+          "name": "POST /categories",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Postman {{runId}}\",\"description\":\"API smoke test\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/categories"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Category created', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  pm.collectionVariables.set('categoryId', pm.response.json().data._id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /products",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Postman item {{runId}}\",\"sku\":\"PST-{{runId}}\",\"category\":\"{{categoryId}}\",\"unit\":\"pcs\",\"purchasePrice\":580,\"sellingPrice\":1000,\"minStockLevel\":3}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Product created with zero stock', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "  const product = pm.response.json().data;",
+                  "  pm.expect(product.stockQty).to.eql(0);",
+                  "  pm.collectionVariables.set('productId', product._id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /stock/opening",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"productId\":\"{{productId}}\",\"quantity\":5,\"unitCost\":580,\"note\":\"Initial stock from API smoke test\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/stock/opening"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Opening movement recorded', function () { pm.response.to.have.status(201); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /stock/movements",
+          "request": { "method": "GET", "url": "{{baseUrl}}/stock/movements?product={{productId}}" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Movement is auditable', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.length).to.be.above(0); });"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Purchase and sale lifecycle",
+      "item": [
+        {
+          "name": "POST /suppliers",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\":\"Postman supplier {{runId}}\",\"phone\":\"9876543210\"}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/suppliers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Supplier created', function () { pm.response.to.have.status(201); pm.collectionVariables.set('supplierId', pm.response.json().data._id); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /purchases",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"supplier\":\"{{supplierId}}\",\"purchaseDate\":\"{{$isoTimestamp}}\",\"items\":[{\"product\":\"{{productId}}\",\"quantity\":4,\"unitCost\":600}]}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/purchases"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Draft purchase created', function () { pm.response.to.have.status(201); pm.collectionVariables.set('purchaseId', pm.response.json().data._id); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /purchases/:id/order",
+          "request": { "method": "POST", "url": "{{baseUrl}}/purchases/{{purchaseId}}/order" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Purchase ordered', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.status).to.eql('ordered'); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /purchases/:id/receive",
+          "request": { "method": "POST", "url": "{{baseUrl}}/purchases/{{purchaseId}}/receive" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Purchase adds stock once', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.movements.length).to.eql(1); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /sales",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"saleDate\":\"{{$isoTimestamp}}\",\"items\":[{\"product\":\"{{productId}}\",\"quantity\":2,\"unitPrice\":1000}]}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/sales"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Draft sale created', function () { pm.response.to.have.status(201); pm.collectionVariables.set('saleId', pm.response.json().data._id); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /sales/:id/confirm",
+          "request": { "method": "POST", "url": "{{baseUrl}}/sales/{{saleId}}/confirm" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Sale confirmation records stock movement', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.movements.length).to.eql(1); });"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "GET /reports/stock",
+          "request": { "method": "GET", "url": "{{baseUrl}}/reports/stock?search=PST-{{runId}}" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Stock report returns the product', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().data.length).to.eql(1); });"]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
